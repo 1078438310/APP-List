@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { ItemType, ItemStatus, MediaItem, SearchResult, Collection, UserCollection } from './types';
-import { searchMedia, generateFeaturedCollections, getRecommendationsForCollection } from './services/geminiService';
-import { BookOpen, Film, Gamepad, Search, Plus, Star, ImageIcon, Trash2, Folder, Check, FolderPlus, Layers, Minus, Filter, X } from './components/Icons';
+import { searchMedia } from './services/geminiService';
+import { BookOpen, Film, Gamepad, Search, Plus, Star, ImageIcon, Trash2, Folder, Check, FolderPlus, Layers, Minus, Filter, X, Square, Power } from './components/Icons';
 import { DetailModal } from './components/DetailModal';
 
 // --- View Components ---
@@ -440,6 +440,7 @@ type SortOption = 'DATE_NEWEST' | 'DATE_OLDEST' | 'TITLE' | 'RATING';
 export default function App() {
   // Global Mode State
   const [activeType, setActiveType] = useState<ItemType>('BOOK');
+  const [isExited, setIsExited] = useState(false);
 
   // View State
   const [view, setView] = useState<'LIBRARY' | 'SEARCH' | 'COLLECTIONS'>('LIBRARY');
@@ -455,11 +456,10 @@ export default function App() {
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ matches: SearchResult[], similar: SearchResult[] }>({ matches: [], similar: [] });
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Collections State
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
-  const [collectionRecommendations, setCollectionRecommendations] = useState<SearchResult[]>([]);
-  const [recommending, setRecommending] = useState(false);
   const [newCollectionTitle, setNewCollectionTitle] = useState('');
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
 
@@ -488,21 +488,71 @@ export default function App() {
   useEffect(() => {
     setSearchResults({ matches: [], similar: [] });
     setSearchQuery('');
-    setCollectionRecommendations([]);
     setActiveCollectionId(null);
     setSortBy('DATE_NEWEST');
     setShowUncategorizedOnly(false);
+    
+    // Cleanup pending search if view changes
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setLoading(false);
+    }
   }, [activeType, view]);
 
   // --- Handlers ---
 
+  const handleExit = () => {
+    if (window.confirm("Are you sure you want to exit?")) {
+        setIsExited(true);
+        // Attempt to close, though usually blocked in browsers unless script-opened
+        try {
+            window.close();
+        } catch(e) {}
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
+    
+    // Cancel previous request if exists
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+
+    // Create new controller
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
-    const results = await searchMedia(searchQuery, activeType);
-    setSearchResults(results);
-    setLoading(false);
+    setSearchResults({ matches: [], similar: [] }); // Clear previous results while loading
+
+    try {
+        const results = await searchMedia(searchQuery, activeType, controller.signal);
+        setSearchResults(results);
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log('Search aborted');
+            // Do not reset loading here, it is handled in cleanup or by the stop action
+        } else {
+            console.error('Search error:', error);
+        }
+    } finally {
+        // Only set loading to false if this specific request finished (and wasn't just superseded)
+        if (abortControllerRef.current === controller) {
+            setLoading(false);
+            abortControllerRef.current = null;
+        }
+    }
+  };
+
+  const handleStopSearch = () => {
+      if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+          setLoading(false);
+      }
   };
 
   const addToLibrary = (result: SearchResult, collectionId?: string) => {
@@ -572,22 +622,6 @@ export default function App() {
       if(activeCollectionId === collectionId) {
           setActiveCollectionId(null);
       }
-  };
-
-  const handleGetCollectionRecommendations = async (collectionId: string) => {
-      const collection = userCollections.find(c => c.id === collectionId);
-      if (!collection) return;
-
-      const collectionItems = items.filter(i => i.collectionIds?.includes(collectionId));
-      
-      setRecommending(true);
-      const recs = await getRecommendationsForCollection(
-          collection.title,
-          collectionItems.map(i => ({ title: i.title, creator: i.creator })),
-          activeType
-      );
-      setCollectionRecommendations(recs);
-      setRecommending(false);
   };
 
   const getTypeName = () => {
@@ -865,23 +899,30 @@ export default function App() {
   const renderSearch = () => (
     <div className="max-w-4xl mx-auto pb-20">
       <div className="mb-10 text-center">
-        <h2 className="text-3xl font-serif mb-4">Discover new {getTypeName()}</h2>
+        <h2 className="text-3xl font-serif mb-4">Add New {getTypeName()}</h2>
+        <p className="text-slate-400 mb-6 text-sm">Type a title to create a new entry in your library.</p>
         <form onSubmit={handleSearch} className="relative max-w-lg mx-auto">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${getTypeName()}...`}
+            placeholder={`Enter title to add...`}
             className="w-full bg-surface border border-slate-700 rounded-full py-3 pl-12 pr-6 text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent placeholder-slate-500"
           />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+          <Plus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
           <button type="submit" className="hidden">Search</button>
         </form>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20">
+        <div className="flex flex-col items-center py-20 gap-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <button 
+            onClick={handleStopSearch}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-medium transition"
+          >
+              <Square className="w-4 h-4 fill-current" /> Stop Search
+          </button>
         </div>
       ) : (
         <div>
@@ -938,7 +979,7 @@ export default function App() {
             
             {!loading && searchResults.matches.length === 0 && searchResults.similar.length === 0 && searchQuery && (
                 <div className="text-center py-10 text-slate-500">
-                    No results found. Try a different query.
+                    Press Enter to generate a new item entry.
                 </div>
             )}
         </div>
@@ -961,7 +1002,6 @@ export default function App() {
                     <button 
                         onClick={() => {
                             setActiveCollectionId(null);
-                            setCollectionRecommendations([]);
                         }}
                         className="text-slate-400 hover:text-white text-sm mb-4 flex items-center gap-1"
                     >
@@ -1007,60 +1047,6 @@ export default function App() {
                           <Plus className="w-8 h-8 mb-2" />
                           <span className="text-sm font-medium">Add Item</span>
                       </div>
-                </div>
-
-                {/* AI Recommendations Section */}
-                <div className="border-t border-slate-800 pt-10">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg">
-                                <Star className="w-5 h-5 text-white" fill={true} />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-white">AI Recommendations</h3>
-                                <p className="text-slate-400 text-sm">Find similar items based on this collection</p>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => handleGetCollectionRecommendations(collection.id)}
-                            disabled={recommending}
-                            className={`px-5 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 ${recommending ? 'bg-slate-700 text-slate-400' : 'bg-white text-slate-900 hover:bg-slate-200'}`}
-                        >
-                            {recommending ? 'Analyzing...' : 'Get Recommendations'}
-                        </button>
-                    </div>
-
-                    {collectionRecommendations.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {collectionRecommendations.map((rec, idx) => {
-                                 const isAdded = items.some(i => i.title === rec.title && i.creator === rec.creator);
-                                 return (
-                                    <div key={idx} className="bg-slate-800/50 border border-slate-700 p-4 rounded-lg flex gap-4">
-                                        <div className="flex-1">
-                                            <h4 className="font-bold text-slate-200 text-sm line-clamp-1">{rec.title}</h4>
-                                            <p className="text-xs text-slate-400 mb-2">{rec.creator} • {rec.year}</p>
-                                            <p className="text-xs text-slate-500 line-clamp-2">{rec.description}</p>
-                                        </div>
-                                        <button 
-                                            onClick={() => isAdded ? handleRemoveFromSearch(rec) : addToLibrary(rec, collection.id)}
-                                            className={`self-center px-3 py-1.5 rounded text-xs font-medium transition whitespace-nowrap group ${
-                                                isAdded 
-                                                ? 'text-emerald-500 bg-emerald-500/10 hover:bg-red-500/10 hover:text-red-500' 
-                                                : 'bg-primary text-white hover:bg-primary/90'
-                                            }`}
-                                        >
-                                            {isAdded ? (
-                                                <>
-                                                    <span className="group-hover:hidden">Added</span>
-                                                    <span className="hidden group-hover:inline">Remove</span>
-                                                </>
-                                            ) : 'Add to Collection'}
-                                        </button>
-                                    </div>
-                                 );
-                            })}
-                        </div>
-                    )}
                 </div>
             </div>
         );
@@ -1164,6 +1150,22 @@ export default function App() {
     );
   };
 
+  if (isExited) {
+      return (
+          <div className="min-h-screen bg-background flex flex-col items-center justify-center text-slate-400">
+              <div className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white font-serif font-bold text-4xl mb-6 shadow-2xl">L</div>
+              <h1 className="text-2xl font-serif text-white mb-2">Goodbye</h1>
+              <p className="mb-8 text-sm">Your library has been saved locally.</p>
+              <button 
+                  onClick={() => setIsExited(false)}
+                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition"
+              >
+                  Open App
+              </button>
+          </div>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-background text-slate-100 font-sans selection:bg-primary/30">
       
@@ -1200,25 +1202,35 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex gap-1 bg-surface/50 p-1 rounded-full border border-slate-800">
+          <div className="flex items-center gap-4">
+            <div className="flex gap-1 bg-surface/50 p-1 rounded-full border border-slate-800">
+                <button 
+                    onClick={() => setView('LIBRARY')} 
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${view === 'LIBRARY' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    My Library
+                </button>
+                <button 
+                    onClick={() => setView('COLLECTIONS')} 
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${view === 'COLLECTIONS' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    My Collections
+                </button>
+                <button 
+                    onClick={() => setView('SEARCH')}
+                    className={`p-2 rounded-full transition ${view === 'SEARCH' ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'}`}
+                    title="Add Item"
+                >
+                    <Plus className="w-5 h-5" />
+                </button>
+            </div>
+            
             <button 
-                onClick={() => setView('LIBRARY')} 
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${view === 'LIBRARY' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                onClick={handleExit}
+                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-full transition"
+                title="Exit App"
             >
-                My Library
-            </button>
-            <button 
-                onClick={() => setView('COLLECTIONS')} 
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${view === 'COLLECTIONS' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-                My Collections
-            </button>
-             <button 
-                onClick={() => setView('SEARCH')}
-                className={`p-2 rounded-full transition ${view === 'SEARCH' ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'}`}
-                title="Search"
-            >
-                <Search className="w-5 h-5" />
+                <Power className="w-5 h-5" />
             </button>
           </div>
         </div>
