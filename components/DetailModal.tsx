@@ -1,6 +1,7 @@
+
 import React, { useState, useRef } from 'react';
-import { MediaItem, ItemStatus, Memory } from '../types';
-import { X, Star, ImageIcon, Trash2, Plus } from './Icons';
+import { MediaItem, ItemStatus, Memory, SharedItemPayload } from '../types';
+import { X, Star, ImageIcon, Trash2, Plus, UserPlus, Clock, Hash } from './Icons';
 
 interface DetailModalProps {
   item: MediaItem;
@@ -8,11 +9,15 @@ interface DetailModalProps {
   onClose: () => void;
   onUpdate: (updatedItem: MediaItem) => void;
   onDelete: (id: string) => void;
+  onShowToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose, onUpdate, onDelete }) => {
+export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose, onUpdate, onDelete, onShowToast }) => {
   const [captionText, setCaptionText] = useState('');
+  const [locationText, setLocationText] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   if (!isOpen) return null;
@@ -47,17 +52,37 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
       id: crypto.randomUUID(),
       imageData: previewImage,
       caption: captionText,
+      sourceLocation: locationText,
       addedAt: new Date().toISOString()
     };
     
     onUpdate({ ...item, memories: [newMemory, ...(item.memories || [])] });
     setCaptionText('');
+    setLocationText('');
     setPreviewImage(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDeleteMemory = (memoryId: string) => {
     onUpdate({ ...item, memories: item.memories.filter(m => m.id !== memoryId) });
+  };
+
+  const handleInvite = () => {
+      if (!inviteName.trim()) return;
+
+      const payload: SharedItemPayload = {
+          item: item,
+          sharer: inviteName
+      };
+
+      const jsonStr = JSON.stringify(payload);
+      const encoded = btoa(encodeURIComponent(jsonStr));
+      const url = `${window.location.origin}${window.location.pathname}?editItem=${encoded}`;
+      
+      navigator.clipboard.writeText(url).then(() => {
+          onShowToast('Collaboration link copied!', 'success');
+          setShowInvite(false);
+      });
   };
 
   const getStatusText = (statusType: 'WANT' | 'PROGRESS') => {
@@ -72,11 +97,17 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
       }
   };
 
+  const getLocationPlaceholder = () => {
+      if (item.type === 'BOOK') return 'Page No. (e.g. 42)';
+      return 'Timestamp (e.g. 1:30:45)';
+  };
+
   const memories = item.memories || [];
+  const collaborators = item.collaborators || [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-surface w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl border border-slate-700">
+      <div className="bg-surface w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl border border-slate-700 relative">
         
         {/* Header Image & Close */}
         <div className="relative h-48 bg-gradient-to-r from-slate-800 to-slate-900 flex items-end p-6">
@@ -84,14 +115,66 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
                {/* Generative placeholder */}
                <img src={`https://placehold.co/800x400/1e293b/FFF?text=${encodeURIComponent(item.title)}`} className="w-full h-full object-cover" alt="cover"/>
             </div>
-            <div className="relative z-10 w-full">
-                <h2 className="text-3xl font-serif font-bold text-white mb-1">{item.title}</h2>
+            <div className="relative z-10 w-full pr-12">
+                <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-3xl font-serif font-bold text-white">{item.title}</h2>
+                </div>
                 <p className="text-slate-300">{item.creator} • {item.year}</p>
+                
+                {collaborators.length > 0 && (
+                    <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-slate-400">Co-edited by:</span>
+                        <div className="flex gap-1">
+                            {collaborators.map((name, i) => (
+                                <span key={i} className="px-1.5 py-0.5 bg-primary/20 text-primary text-xs rounded border border-primary/30">{name}</span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
-            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition">
-                <X className="w-5 h-5" />
-            </button>
+            
+            <div className="absolute top-4 right-4 flex gap-2">
+                <button 
+                    onClick={() => setShowInvite(!showInvite)}
+                    className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition"
+                    title="Invite friend to co-edit"
+                >
+                    <UserPlus className="w-5 h-5" />
+                </button>
+                <button onClick={onClose} className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
         </div>
+
+        {/* Invite Popup */}
+        {showInvite && (
+            <div className="bg-slate-800 border-b border-slate-700 p-4 animate-fade-in">
+                <h3 className="text-sm font-medium text-white mb-2">Invite Friend to Edit</h3>
+                <p className="text-xs text-slate-400 mb-3">
+                    Create a link to let a friend import this card and make changes. 
+                    <br/>
+                    <span className="opacity-70 italic">Note: They will need to share the updated version back to you.</span>
+                </p>
+                <div className="flex gap-2">
+                    <input 
+                        autoFocus
+                        type="text" 
+                        value={inviteName}
+                        onChange={(e) => setInviteName(e.target.value)}
+                        placeholder="Your Name (so they know who sent it)"
+                        className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary"
+                    />
+                    <button 
+                        onClick={handleInvite}
+                        disabled={!inviteName.trim()}
+                        className="px-4 py-1.5 bg-primary text-white text-sm rounded hover:bg-primary/90 disabled:opacity-50"
+                    >
+                        Copy Link
+                    </button>
+                </div>
+            </div>
+        )}
 
         <div className="p-6 space-y-6">
             {/* Work Info Section */}
@@ -123,7 +206,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
                     >
                         <option value="WANT_TO">Want to {getStatusText('WANT')}</option>
                         <option value="IN_PROGRESS">{getStatusText('PROGRESS')}</option>
-                        <option value="COMPLETED">Completed</option>
+                        <option value="COMPLETED">Done</option>
                     </select>
                 </div>
 
@@ -191,19 +274,34 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
                         onChange={handleFileSelect}
                     />
 
-                    <div className="flex gap-2 mt-4">
-                        <input 
-                            type="text" 
-                            value={captionText}
-                            onChange={(e) => setCaptionText(e.target.value)}
-                            placeholder="Add a caption for this memory..."
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary placeholder-slate-500"
-                            onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
-                        />
+                    <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                        {/* Location Input */}
+                        <div className="sm:w-1/3">
+                            <input
+                                type="text"
+                                value={locationText}
+                                onChange={(e) => setLocationText(e.target.value)}
+                                placeholder={getLocationPlaceholder()}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary placeholder-slate-500"
+                            />
+                        </div>
+                        
+                        {/* Caption Input */}
+                        <div className="flex-1">
+                            <input 
+                                type="text" 
+                                value={captionText}
+                                onChange={(e) => setCaptionText(e.target.value)}
+                                placeholder="Add a caption..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary placeholder-slate-500"
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
+                            />
+                        </div>
+                        
                         <button 
                             onClick={handleAddMemory}
                             disabled={!previewImage}
-                            className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 ${previewImage ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
+                            className={`px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-sm whitespace-nowrap ${previewImage ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
                         >
                             <Plus className="w-4 h-4" /> Save
                         </button>
@@ -217,8 +315,16 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
                     )}
                     {memories.map((memory) => (
                         <div key={memory.id} className="group relative bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                            {/* Location Badge */}
+                            {memory.sourceLocation && (
+                                <div className="absolute top-2 left-2 z-10 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-xs text-white flex items-center gap-1 border border-white/10 shadow-sm">
+                                    {item.type === 'BOOK' ? <Hash className="w-3 h-3 text-slate-300"/> : <Clock className="w-3 h-3 text-slate-300"/>}
+                                    <span className="font-mono">{memory.sourceLocation}</span>
+                                </div>
+                            )}
+
                             <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
-                                <img src={memory.imageData} alt="Memory" className="w-full h-full object-cover" />
+                                <img src={memory.imageData} alt="Memory" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition" />
                             </div>
                             <div className="p-3">
                                 <p className="text-slate-300 text-sm font-medium">{memory.caption || "No caption"}</p>
@@ -226,7 +332,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
                             </div>
                             <button 
                                 onClick={() => handleDeleteMemory(memory.id)}
-                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 bg-black/60 text-white hover:bg-red-500 rounded-full transition backdrop-blur-sm"
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 bg-black/60 text-white hover:bg-red-500 rounded-full transition backdrop-blur-sm z-10"
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>
