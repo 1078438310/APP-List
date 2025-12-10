@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { MediaItem, ItemStatus, Memory, SharedItemPayload } from '../types';
-import { X, Star, ImageIcon, Trash2, Plus, UserPlus, Clock, Hash } from './Icons';
+import { X, Star, ImageIcon, Trash2, Plus, UserPlus, Clock, Hash, Send } from './Icons';
 
 interface DetailModalProps {
   item: MediaItem;
@@ -17,7 +17,6 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
   const [locationText, setLocationText] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteName, setInviteName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   if (!isOpen) return null;
@@ -67,22 +66,17 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
     onUpdate({ ...item, memories: item.memories.filter(m => m.id !== memoryId) });
   };
 
-  const handleInvite = () => {
-      if (!inviteName.trim()) return;
+  const mockFriends = [
+    { id: '1', name: 'Alice', color: 'bg-red-500' },
+    { id: '2', name: 'Bob', color: 'bg-blue-500' },
+    { id: '3', name: 'Charlie', color: 'bg-green-500' },
+    { id: '4', name: 'David', color: 'bg-yellow-500' },
+    { id: '5', name: 'Emma', color: 'bg-purple-500' },
+  ];
 
-      const payload: SharedItemPayload = {
-          item: item,
-          sharer: inviteName
-      };
-
-      const jsonStr = JSON.stringify(payload);
-      const encoded = btoa(encodeURIComponent(jsonStr));
-      const url = `${window.location.origin}${window.location.pathname}?editItem=${encoded}`;
-      
-      navigator.clipboard.writeText(url).then(() => {
-          onShowToast('Collaboration link copied!', 'success');
-          setShowInvite(false);
-      });
+  const handleInviteFriend = (friendName: string) => {
+      onShowToast(`Invitation sent to ${friendName}!`, 'success');
+      setShowInvite(false);
   };
 
   const getStatusText = (statusType: 'WANT' | 'PROGRESS') => {
@@ -149,29 +143,32 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, isOpen, onClose,
 
         {/* Invite Popup */}
         {showInvite && (
-            <div className="bg-slate-800 border-b border-slate-700 p-4 animate-fade-in">
-                <h3 className="text-sm font-medium text-white mb-2">Invite Friend to Edit</h3>
+            <div className="bg-slate-800 border-b border-slate-700 p-4 animate-fade-in absolute z-20 w-full top-48 left-0 shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-white">Select Friend to Invite</h3>
+                    <button onClick={() => setShowInvite(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4"/></button>
+                </div>
                 <p className="text-xs text-slate-400 mb-3">
-                    Create a link to let a friend import this card and make changes. 
-                    <br/>
-                    <span className="opacity-70 italic">Note: They will need to share the updated version back to you.</span>
+                    Choose a friend to send a co-editing invitation for this card.
                 </p>
-                <div className="flex gap-2">
-                    <input 
-                        autoFocus
-                        type="text" 
-                        value={inviteName}
-                        onChange={(e) => setInviteName(e.target.value)}
-                        placeholder="Your Name (so they know who sent it)"
-                        className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary"
-                    />
-                    <button 
-                        onClick={handleInvite}
-                        disabled={!inviteName.trim()}
-                        className="px-4 py-1.5 bg-primary text-white text-sm rounded hover:bg-primary/90 disabled:opacity-50"
-                    >
-                        Copy Link
-                    </button>
+                <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                    {mockFriends.map(friend => (
+                        <div key={friend.id} className="flex items-center justify-between p-2 rounded hover:bg-slate-700 transition group">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full ${friend.color} flex items-center justify-center text-white text-xs font-bold`}>
+                                    {friend.name.charAt(0)}
+                                </div>
+                                <span className="text-sm text-slate-200">{friend.name}</span>
+                            </div>
+                            <button 
+                                onClick={() => handleInviteFriend(friend.name)}
+                                className="p-1.5 bg-primary text-white rounded opacity-0 group-hover:opacity-100 transition hover:bg-primary/90"
+                                title="Send Invite"
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ))}
                 </div>
             </div>
         )}

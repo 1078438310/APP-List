@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ItemType, ItemStatus, MediaItem, SearchResult, Collection, UserCollection, SharedCollectionPayload, SharedItemPayload } from './types';
@@ -14,10 +15,10 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
 
     return createPortal(
         <div className="fixed top-[18.75rem] left-1/2 -translate-x-1/2 z-[100] animate-fade-in-down pointer-events-none">
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl border backdrop-blur-md ${
-                type === 'error' ? 'bg-red-500/10 border-red-500/50 text-red-200' : 
-                type === 'success' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-200' :
-                'bg-slate-800/90 border-slate-600 text-slate-200'
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl border ${
+                type === 'error' ? 'bg-slate-800 border-red-500/50 text-red-200' : 
+                type === 'success' ? 'bg-slate-800 border-emerald-500/50 text-emerald-200' :
+                'bg-slate-800 border-slate-600 text-slate-200'
             }`}>
                 {type === 'error' && <AlertCircle className="w-5 h-5 text-red-500" />}
                 {type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-500" />}
@@ -149,7 +150,7 @@ const StatusBadge = ({ status, onChange }: { status: ItemStatus, onChange?: (s: 
                         onMouseUp={stopProp}
                         onTouchStart={stopProp}
                         onTouchEnd={stopProp}
-                        className={`text-left px-3 py-2 text-xs hover:bg-slate-700 flex items-center justify-between transition-colors ${status === s ? 'text-white bg-slate-700/50' : 'text-slate-300'}`}
+                        className={`text-left px-3 py-2 text-xs hover:bg-slate-700 flex items-center justify-between transition-colors ${status === s ? 'text-white bg-slate-700' : 'text-slate-300'}`}
                     >
                         {labels[s]}
                         {status === s && <Check className="w-3 h-3 text-primary" />}
@@ -625,7 +626,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
                         e.stopPropagation();
                         onDelete(e);
                     }}
-                    className="p-1.5 bg-slate-800/80 text-slate-400 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-all backdrop-blur-sm"
+                    className="p-1.5 bg-slate-800 text-slate-400 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-all"
                     title={deleteTooltip || "Remove from Library"}
                 >
                     <ActionIcon className="w-4 h-4" />
@@ -640,7 +641,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
                         e.stopPropagation();
                         setShowCollections(!showCollections);
                     }}
-                    className="p-1.5 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-primary rounded-lg transition backdrop-blur-sm"
+                    className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-primary rounded-lg transition"
                     title="Manage Collections"
                 >
                     <Folder className="w-4 h-4" />
@@ -1540,7 +1541,7 @@ export default function App() {
                       )}
                   </div>
 
-                  <div className="p-4 border-t border-slate-700 flex justify-end gap-3 bg-slate-900/50 rounded-b-xl">
+                  <div className="p-4 border-t border-slate-700 flex justify-end gap-3 bg-slate-900 rounded-b-xl">
                         <button 
                             onClick={() => setIsAddFromLibraryOpen(false)}
                             className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 font-medium text-sm"
@@ -1957,9 +1958,9 @@ export default function App() {
         {/* Floating Action Panels */}
         <div className="relative z-30">
             {showImportInput && (
-                <div ref={importSectionRef} className="absolute top-0 left-0 right-0 bg-surface border border-slate-700 rounded-xl animate-fade-in shadow-2xl overflow-hidden">
+                <div ref={importSectionRef} className="absolute top-0 left-0 right-0 bg-slate-900 border border-slate-700 rounded-xl animate-fade-in shadow-2xl overflow-hidden">
                     {/* Header & Tabs */}
-                    <div className="bg-slate-900/50 border-b border-slate-700 px-6 pt-4">
+                    <div className="bg-slate-900 border-b border-slate-700 px-6 pt-4">
                         <h3 className="text-lg font-medium mb-4">Import Collection</h3>
                         <div className="flex w-full">
                             <button 
@@ -2087,7 +2088,7 @@ export default function App() {
             )}
 
             {isCreatingCollection && (
-                <div ref={newCollectionSectionRef} className="absolute top-0 left-0 right-0 bg-surface border border-slate-700 p-6 rounded-xl animate-fade-in shadow-2xl">
+                <div ref={newCollectionSectionRef} className="absolute top-0 left-0 right-0 bg-slate-900 border border-slate-700 p-6 rounded-xl animate-fade-in shadow-2xl">
                     <h3 className="text-lg font-medium mb-1">Create New Collection</h3>
                     <p className="text-xs text-slate-400 mb-4">Enter details for your new list:</p>
                     <div className="flex flex-col gap-3">
